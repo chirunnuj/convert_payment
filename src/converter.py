@@ -1,7 +1,8 @@
+import csv
 import logging
 import os
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 import openpyxl
 
@@ -73,6 +74,50 @@ def read_excel(input_path: str) -> List[PaymentRecord]:
     return records
 
 
+def read_csv(input_path: str) -> List[PaymentRecord]:
+    logger.info(f"Reading CSV file: {input_path}")
+    with open(input_path, newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        headers = [h.strip() for h in next(reader)]
+        validate_excel_headers(headers)
+        header_map = {h: idx for idx, h in enumerate(headers)}
+        records = []
+        for row_idx, row in enumerate(reader, start=2):
+            if all(cell.strip() == "" for cell in row):
+                continue
+            try:
+                bank_name     = row[header_map["BankName"]].strip()
+                payment_date  = row[header_map["PaymentDate"]].strip()
+                payment_time  = row[header_map["PaymentTime"]].strip()
+                customer_name = row[header_map["CustomerName"]].strip()
+                account       = row[header_map["Account"]].strip()
+                amount_str    = row[header_map["Amt"]].strip()
+                validated_bank_name = validate_bank_name(bank_name)
+                bank_info = get_bank_info(validated_bank_name)
+                validate_payment_date(payment_date)
+                validate_payment_time(payment_time)
+                validate_customer_name(customer_name)
+                validate_account(account)
+                amount = validate_amount(amount_str)
+                amount_formatted = format_amount(amount)
+                records.append(PaymentRecord(
+                    bank_name=validated_bank_name,
+                    bank_code=bank_info["code"],
+                    company_account=bank_info["account"],
+                    payment_date=payment_date,
+                    payment_time=payment_time,
+                    customer_name=customer_name,
+                    account=account,
+                    amount=amount,
+                    amount_formatted=amount_formatted,
+                ))
+            except ValidationError as e:
+                logger.error(f"Validation error at row {row_idx}: {e}")
+                raise
+    logger.info(f"Read {len(records)} payment records")
+    return records
+
+
 def build_header_line(seq_no: int, effective_date: str, bank_code: str) -> str:
     line = [" "] * constants.LINE_LENGTH
     line[0] = "H"
@@ -132,9 +177,22 @@ def build_trailer_line(total_lines: int, bank_code: str, sum_credit: str) -> str
     return "".join(line)
 
 
-def convert_excel_to_payment(input_path: str, output_dir: str = "output") -> ConversionResult:
+def convert_to_payment(
+    input_path: str,
+    output_dir: str = "output",
+    output_filename: Optional[str] = None,
+) -> ConversionResult:
     try:
-        records = read_excel(input_path)
+        ext = os.path.splitext(input_path)[1].lower()
+        if ext == ".csv":
+            records = read_csv(input_path)
+        elif ext in (".xlsx", ".xls"):
+            records = read_excel(input_path)
+        else:
+            return ConversionResult(
+                success=False,
+                error_message=f"Unsupported file type '{ext}'. Expected .csv, .xlsx, or .xls",
+            )
         if not records:
             return ConversionResult(
                 success=False,
@@ -156,7 +214,8 @@ def convert_excel_to_payment(input_path: str, output_dir: str = "output") -> Con
         
         total_lines = len(records) + 2
         trailer_line = build_trailer_line(total_lines, bank_code, sum_credit)
-        output_filename = f"COLLECTION_{effective_date}.txt"
+        if output_filename is None:
+            output_filename = f"COLLECTION_{effective_date}.txt"
         output_path = os.path.join(output_dir, output_filename)
         os.makedirs(output_dir, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
