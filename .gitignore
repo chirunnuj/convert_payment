@@ -222,3 +222,5 @@ ExampleData/
 output/
 convert_payment_env/
 example_data/
+AGENTS.md
+CLAUDE.md
