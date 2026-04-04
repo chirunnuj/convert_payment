@@ -21,7 +21,7 @@ def main():
             examples:
               python -m src.main -i payments.xlsx
               python -m src.main -i payments.csv -o output/ -v
-              python -m src.main -i payments.xlsx -o output/ -f payments_march.txt
+              python -m src.main -i payments.xlsx --output-dir output/ --output-filename payments_march.txt
             """),
     )
     parser.add_argument(
@@ -31,13 +31,13 @@ def main():
         help="Path to input Excel (.xlsx) or CSV (.csv) file",
     )
     parser.add_argument(
-        "--output",
+        "--output-dir",
         "-o",
         default="output",
         help="Output directory (default: output)",
     )
     parser.add_argument(
-        "--filename",
+        "--output-filename",
         "-f",
         default=None,
         help="Output file name (default: COLLECTION_DDMMYYYY.txt)",
@@ -49,19 +49,19 @@ def main():
         help="Enable verbose logging",
     )
     args = parser.parse_args()
-    if args.filename is not None:
-        _, ext = os.path.splitext(args.filename)
+    if args.output_filename is not None:
+        _, ext = os.path.splitext(args.output_filename)
         if ext == "":
-            args.filename = args.filename + ".txt"
+            args.output_filename = args.output_filename + ".txt"
         elif ext.lower() != ".txt":
-            print(f"Error: --filename must have a .txt extension, got '{ext}'", file=sys.stderr)
+            print(f"Error: --output-filename must have a .txt extension, got '{ext}'", file=sys.stderr)
             return 1
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
     input_path = args.input
-    output_dir = args.output
+    output_dir = args.output_dir
     logger.info(f"Starting conversion: {input_path}")
-    result = convert_to_payment(input_path, output_dir, args.filename)
+    result = convert_to_payment(input_path, output_dir, args.output_filename)
     if result.success:
         logger.info(f"Conversion successful!")
         logger.info(f"Output: {result.output_path}")
